@@ -4,49 +4,57 @@ import redis.clients.jedis.Jedis;
 import redis.clients.jedis.params.ZAddParams;
 
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Set;
 
 public class RedisConnector {
-    private final String KEY;
-    private static final String REDIS_SERVER_HOST_ADDRESS = "172.17.0.3";
-    private static final int REDIS_SERVER_PORT = 6379;
-    private Set<String> usersRegistered;
+	private static final String REDIS_SERVER_HOST_ADDRESS = "127.0.0.1";
+	private static final int REDIS_SERVER_PORT = 6379;
+	private final String KEY;
+	private Jedis jedis = new Jedis(REDIS_SERVER_HOST_ADDRESS, REDIS_SERVER_PORT);
 
-    private Jedis jedis = new Jedis(REDIS_SERVER_HOST_ADDRESS, REDIS_SERVER_PORT);
+	public RedisConnector(String key) {
+		this.KEY = key;
+	}
 
-    public RedisConnector(String key, Set<String> usersRegistered) throws InterruptedException {
-        this.usersRegistered = usersRegistered;
-        this.KEY = key;
-        for (String u : usersRegistered) {
-            double score = Long.valueOf(new Date().getTime()).doubleValue();
-            jedis.zadd(KEY, score, u);
-            Thread.sleep(1);
-        }
-    }
+	public void addAll(Set<String> users) {
+		try {
+			for (String u : users) {
+				add(u);
+				Thread.sleep(1);
+			}
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
 
-    public String getUserToShow() {
-        return Math.random() >= 0.9 ? getRichUser() : getLastUser();
-    }
+	public void add(String user) {
+		jedis.zadd(KEY, getScore(), user);
+	}
 
-    private String getRichUser() {
-        int random = (int) Math.round(Math.random() * (usersRegistered.size() - 1));
-        String user = getUser(random);
-        System.out.println(user + " donated some money to our service");
-        return user;
-    }
+	public void move(String user) {
+		jedis.zadd(KEY, getScore(), user, ZAddParams.zAddParams().ch());
+	}
 
-    private String getLastUser() {
-        return getUser(0);
-    }
+	public void removeAll(Set<String> users) {
+		users.forEach(this::remove);
+	}
 
-    private String getUser(int offset) {
-        String user = (String) jedis.zrangeByScore(KEY, "-inf", "+inf", offset, 1).toArray()[0];
-        moveToTheEnd(user);
-        return user;
-    }
+	public void remove(String user) {
+		jedis.zrem(KEY, user);
+	}
 
-    private void moveToTheEnd(String member) {
-        double score = Long.valueOf(new Date().getTime()).doubleValue();
-        jedis.zadd(KEY, score, member, ZAddParams.zAddParams().ch());
-    }
+	public void clear() {
+		Set<String> allUsers = jedis.zrangeByScore(KEY, "-inf", "+inf");
+		removeAll(allUsers);
+	}
+
+	public Set<String> getSortedSed(String min, String max, int offset, int count) {
+		return jedis.zrangeByScore(KEY, min, max, offset, count);
+	}
+
+	private double getScore() {
+		return Long.valueOf(new Date().getTime()).doubleValue();
+	}
+
 }
